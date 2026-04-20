@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포트별 벙커 구매금액 비교 시스템 v6.2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb; --success: #059669; --secondary: #0ea5e9;
+            --warning: #facc15; --danger: #dc2626; --bg: #f8fafc; --card: #ffffff;
+            --input-yellow: #fef9c3; --gray-out: #f1f5f9;
+        }
+
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .date-input-group { background: #e2e8f0; padding: 8px 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
+        .date-input-group input { border: 1px solid #cbd5e1; padding: 4px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+
+        #sync-status { font-size: 0.85rem; margin-left: 10px; font-weight: bold; }
+
+        .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 24px; }
+        .kpi-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-top: 4px solid var(--primary); }
+        .kpi-card.best { border-top-color: var(--success); background: #f0fdf4; }
+        .kpi-card.second { border-top-color: var(--secondary); background: #f0f9ff; }
+        .kpi-label { font-size: 0.8rem; color: #64748b; margin-bottom: 5px; }
+        .kpi-value { font-size: 1.2rem; font-weight: 800; }
+
+        .top-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .main-grid { display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
+
+        .filter-section { 
+            background: #f1f5f9; padding: 12px 20px; border-radius: 12px; 
+            margin-bottom: 20px; display: flex; align-items: center; gap: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        .filter-group { display: flex; gap: 20px; align-items: center; font-size: 0.95rem; font-weight: 600; }
+        .filter-group input { cursor: pointer; transform: scale(1.1); }
+
+        .card { background: var(--card); padding: 18px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h3 { margin-top: 0; font-size: 1rem; border-left: 4px solid var(--primary); padding-left: 10px; margin-bottom: 15px; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: center; }
+        th { background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; color: #475569; }
+        td { padding: 6px; border: 1px solid #cbd5e1; }
+
+        input[type="number"] {
+            width: 85%; padding: 4px; border: 1px solid #eab308; background: var(--input-yellow);
+            text-align: right; border-radius: 4px; font-size: 0.85rem;
+        }
+
+        .add-charge-input {
+            width: 80px !important; border: 1px solid #eab308 !important; background: var(--input-yellow) !important;
+            text-align: right !important; padding: 4px; border-radius: 4px;
+        }
+
+        .minus { color: var(--primary); font-weight: bold; }
+        .plus { color: var(--danger); font-weight: bold; }
+        .row-best { background-color: #f0fdf4; font-weight: bold; }
+        .row-second { background-color: #f0f9ff; }
+        .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: white; margin-left: 5px; }
+        .badge-best { background: var(--success); }
+        .badge-second { background: var(--secondary); }
+        .unavailable { color: #94a3b8; background: #f8fafc; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>🚢 포트별 벙커 구매금액 비교 시스템 <span id="sync-status">● 데이터 동기화 대기 중...</span></h1>
+        <div class="date-input-group">
+            <label>기준일:</label>
+            <input type="date" id="base-date" onchange="fetchSpreadsheetData()">
+        </div>
+    </header>
+
+    <div class="kpi-container">
+        <div class="kpi-card best"><div class="kpi-label">최적 구매처 (BEST)</div><div class="kpi-value" id="kpi-best">-</div></div>
+        <div class="kpi-card second"><div class="kpi-label">차순위 구매처 (2ND)</div><div class="kpi-value" id="kpi-second">-</div></div>
+        <div class="kpi-card"><div class="kpi-label">최저가 예상 총액</div><div class="kpi-value" id="kpi-min-total">$ 0</div></div>
+        <div class="kpi-card"><div class="kpi-label">월드퓨얼 대비 절감액</div><div class="kpi-value" id="kpi-savings" style="color: var(--success);">$ 0</div></div>
+    </div>
+
+    <div class="top-grid">
+        <div class="card">
+            <h3>💰 벙커가격 (전일 BW) 및 한국 대비 차이 ($)</h3>
+            <table>
+                <thead>
+                    <tr><th rowspan="2">지역</th><th colspan="3">벙커가격 (전일 BW)</th><th colspan="3">한국대비 차이</th></tr>
+                    <tr><th>HSFO</th><th>LSFO</th><th>LSMGO</th><th>HSFO</th><th>LSFO</th><th>LSMGO</th></tr>
+                </thead>
+                <tbody id="price-input-body"></tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>🇰🇷 한국 TERM 구매단가 ($)</h3>
+            <table>
+                <thead><tr><th>VENDOR</th><th>HSFO</th><th>LSFO</th><th>LSMGO</th></tr></thead>
+                <tbody id="term-input-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <strong>🔍 비교 지역 선택:</strong>
+        <div class="filter-group">
+            <label><input type="checkbox" id="filter-all" checked onchange="toggleAllFilters(this)"> 전체선택</label>
+            <label><input type="checkbox" class="region-filter" value="한국" checked onchange="updateAll()"> 한국</label>
+            <label><input type="checkbox" class="region-filter" value="상해" checked onchange="updateAll()"> 상해</label>
+            <label><input type="checkbox" class="region-filter" value="홍콩" checked onchange="updateAll()"> 홍콩</label>
+            <label><input type="checkbox" class="region-filter" value="싱가포르" checked onchange="updateAll()"> 싱가포르</label>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div class="card">
+            <h3>📦 구매량 설정 (MT)</h3>
+            <table style="background: var(--input-yellow); margin-bottom: 20px;">
+                <thead><tr><th>HSFO</th><th>LSFO</th><th>LSMGO</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><input type="number" id="qty-hsfo" value="300" oninput="updateAll()"></td>
+                        <td><input type="number" id="qty-lsfo" value="0" oninput="updateAll()"></td>
+                        <td><input type="number" id="qty-lsmgo" value="50" oninput="updateAll()"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <canvas id="costChart"></canvas>
+        </div>
+        <div class="card">
+            <h3>📊 포트별 상세 구매금액 비교 (최저가순 정렬)</h3>
+            <table>
+                <thead><tr><th>지역</th><th>구분</th><th>HSFO</th><th>LSFO</th><th>LSMGO</th><th>BARGE</th><th>ADD.</th><th>Total Amount</th></tr></thead>
+                <tbody id="final-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQZld-qA-5eh7NiwS3YH2ZO31-CZ1WaIV1RxRQGGY_qWNisPTKN-OCrbSd_Tm_VPUOr3Ow7TBhZLpwI/pub?output=csv';
+    
+    let spotPorts = [
+        { id: 'sin', name: '싱가포르', hsfo: 0, lsfo: 0, lsmgo: 0 },
+        { id: 'kor', name: '한국', hsfo: 0, lsfo: 0, lsmgo: 0 },
+        { id: 'hkg', name: '홍콩', hsfo: 0, lsfo: 0, lsmgo: 0 },
+        { id: 'sha', name: '상해', hsfo: 0, lsfo: 0, lsmgo: 0 }
+    ];
+
+    const termVendors = [
+        { id: 'wfs', vName: '월드퓨얼' }, { id: 'pen', vName: '페닌슐라' }, { id: 'han', vName: '한유' }
+    ];
+
+    let addCharges = {};
+    let myChart;
+
+    /**
+     * [핵심] CSV의 한 줄을 정교하게 분석하는 함수
+     * 큰따옴표 안에 있는 쉼표를 무시하고 컬럼을 나눕니다.
+     */
+    function parseCSVRow(text) {
+        const result = [];
+        let cur = '';
+        let inQuote = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            if (char === '"') {
+                inQuote = !inQuote;
+            } else if (char === ',' && !inQuote) {
+                result.push(cur.trim());
+                cur = '';
+            } else {
+                cur += char;
+            }
+        }
+        result.push(cur.trim());
+        return result;
+    }
+
+    /**
+     * 날짜 텍스트 인식 로직 (8자리 숫자 형식 포함)
+     */
+    function parseCustomDate(dateStr) {
+        if (!dateStr) return new Date(NaN);
+        let clean = dateStr.toString().replace(/[^0-9]/g, '');
+        if (clean.length === 8) {
+            const y = clean.substring(0, 4);
+            const m = clean.substring(4, 6);
+            const d = clean.substring(6, 8);
+            return new Date(`${y}-${m}-${d}`);
+        }
+        const normalized = dateStr.replace(/[\.\/]/g, '-').replace(/\s/g, '');
+        return new Date(normalized);
+    }
+
+    async function fetchSpreadsheetData() {
+        const statusEl = document.getElementById('sync-status');
+        const baseDateVal = document.getElementById('base-date').value;
+        
+        const targetDate = new Date(baseDateVal);
+        targetDate.setDate(targetDate.getDate() - 1);
+        targetDate.setHours(0, 0, 0, 0);
+
+        statusEl.innerText = "● 정밀 파싱 진행 중...";
+        statusEl.style.color = "var(--warning)";
+
+        try {
+            const response = await fetch(`${CSV_URL}&t=${new Date().getTime()}`);
+            if (!response.ok) throw new Error("시트 연결 실패");
+
+            const csvText = await response.text();
+            
+            // 단순 split(',') 대신 정교한 parseCSVRow 함수 사용
+            const rows = csvText.split('\n')
+                .map(r => r.trim())
+                .filter(r => r.length > 0)
+                .map(rowText => parseCSVRow(rowText));
+
+            const dataRows = rows.slice(2) // 헤더 2줄 제외
+                .map(row => ({
+                    dateObj: parseCustomDate(row[0]),
+                    originalRow: row
+                }))
+                .filter(item => !isNaN(item.dateObj.getTime()))
+                .sort((a, b) => a.dateObj - b.dateObj);
+
+            if (dataRows.length === 0) throw new Error("분석 가능한 데이터 없음");
+
+            let selected = dataRows.find(item => item.dateObj >= targetDate);
+            if (!selected) selected = dataRows[dataRows.length - 1];
+
+            statusEl.innerText = `● 동기화 완료 (적용일: ${selected.originalRow[0]})`;
+            statusEl.style.color = "var(--success)";
+
+            const sRow = selected.originalRow;
+            
+            // 컬럼 인덱스 매핑 (A=0, B=1, ...)
+            const colMap = {
+                'sin': { h: 1, l: 7, g: 13 },
+                'kor': { h: 2, l: 8, g: 14 },
+                'hkg': { h: 3, l: 9, g: 15 },
+                'sha': { h: 6, l: 12, g: 18 }
+            };
+
+            spotPorts.forEach(port => {
+                const m = colMap[port.id];
+                if (m) {
+                    // 콤마 제거 로직 보완
+                    const parsePrice = (val) => {
+                        if (!val) return 0;
+                        return parseFloat(val.replace(/,/g, "")) || 0;
+                    };
+                    port.hsfo = parsePrice(sRow[m.h]);
+                    port.lsfo = parsePrice(sRow[m.l]);
+                    port.lsmgo = parsePrice(sRow[m.g]);
+                }
+            });
+
+        } catch (error) {
+            console.error("Fetch Error:", error);
+            statusEl.innerText = `● 연동 에러: ${error.message}`;
+            statusEl.style.color = "var(--danger)";
+        } finally {
+            initPriceTable();
+            updateAll();
+        }
+    }
+
+    // --- 이하 로직 동일 유지 ---
+    function initPriceTable() {
+        document.getElementById('price-input-body').innerHTML = spotPorts.map(p => `
+            <tr>
+                <td><strong>${p.name}</strong></td>
+                <td><input type="number" id="p-${p.id}-hsfo" value="${p.hsfo}" oninput="updateAll()"></td>
+                <td><input type="number" id="p-${p.id}-lsfo" value="${p.lsfo}" oninput="updateAll()"></td>
+                <td><input type="number" id="p-${p.id}-lsmgo" value="${p.lsmgo}" oninput="updateAll()"></td>
+                <td id="d-${p.id}-hsfo" class="diff-cell">-</td><td id="d-${p.id}-lsfo" class="diff-cell">-</td><td id="d-${p.id}-lsmgo" class="diff-cell">-</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('term-input-body').innerHTML = termVendors.map(v => `
+            <tr><td><strong>${v.vName}</strong></td><td id="t-${v.id}-hsfo">-</td><td id="t-${v.id}-lsfo">-</td><td id="t-${v.id}-lsmgo">-</td></tr>
+        `).join('');
+    }
+
+    function calculateBarge(vId, qH, qL, qG) {
+        let barge = 0;
+        if (qH > 0) {
+            if (vId === 'wfs') {
+                const sum = qH + qG;
+                if (sum >= 300 && sum < 400) barge = 2000; else if (sum >= 400 && sum < 500) barge = 1500; else if (sum >= 500 && sum < 600) barge = 500; else if (sum >= 600) barge = 0;
+            } else if (vId === 'pen') {
+                const sum = qH + qG;
+                if (sum >= 200 && sum < 300) barge = 2000; else if (sum >= 300 && sum < 400) barge = 1500; else if (sum >= 400 && sum < 500) barge = 1000; else if (sum >= 500) barge = 0;
+            } else if (vId === 'han') {
+                if (qH >= 200 && qH < 300) barge = 1500; else if (qH >= 300 && qH < 500) barge = 1000; else if (qH >= 500) barge = 0;
+            }
+        }
+        if (qL > 0) { if (qL >= 150 && qL < 300) barge += 200; else if (qL < 150) barge += 500; }
+        return barge;
+    }
+
+    function toggleAllFilters(master) {
+        document.querySelectorAll('.region-filter').forEach(cb => cb.checked = master.checked);
+        updateAll();
+    }
+
+    window.setAddCharge = function(region, label, value) {
+        addCharges[`${region}-${label}`] = value === "" ? 0 : parseFloat(value);
+        updateAll();
+    }
+
+    function updateAll() {
+        const qH = parseFloat(document.getElementById('qty-hsfo').value) || 0;
+        const qL = parseFloat(document.getElementById('qty-lsfo').value) || 0;
+        const qG = parseFloat(document.getElementById('qty-lsmgo').value) || 0;
+
+        const pKorH = parseFloat(document.getElementById('p-kor-hsfo')?.value) || 0;
+        const pKorL = parseFloat(document.getElementById('p-kor-lsfo')?.value) || 0;
+        const pKorG = parseFloat(document.getElementById('p-kor-lsmgo')?.value) || 0;
+
+        const termPrices = {
+            wfs: { h: pKorH - 8, l: pKorL - 22.5, g: pKorG - 30 },
+            pen: { h: pKorH - 8, l: null, g: pKorG - 20 },
+            han: { h: pKorH - 5, l: pKorL - 18, g: pKorG - 2 }
+        };
+
+        termVendors.forEach(v => {
+            const p = termPrices[v.id];
+            document.getElementById(`t-${v.id}-hsfo`).innerText = p.h.toFixed(2);
+            const lEl = document.getElementById(`t-${v.id}-lsfo`);
+            lEl.innerText = p.l ? p.l.toFixed(2) : "-"; lEl.style.background = p.l ? "transparent" : "#f1f5f9";
+            document.getElementById(`t-${v.id}-lsmgo`).innerText = p.g.toFixed(2);
+        });
+
+        let results = [];
+        const checkedRegions = Array.from(document.querySelectorAll('.region-filter:checked')).map(cb => cb.value);
+
+        spotPorts.forEach(port => {
+            if (!checkedRegions.includes(port.name)) return;
+            const h = parseFloat(document.getElementById(`p-${port.id}-hsfo`).value) || 0;
+            const l = parseFloat(document.getElementById(`p-${port.id}-lsfo`).value) || 0;
+            const g = parseFloat(document.getElementById(`p-${port.id}-lsmgo`).value) || 0;
+            if (port.id !== 'kor') {
+                updateDiff(`d-${port.id}-hsfo`, h - pKorH); updateDiff(`d-${port.id}-lsfo`, l - pKorL); updateDiff(`d-${port.id}-lsmgo`, g - pKorG);
+            }
+            const addVal = addCharges[`${port.name}-SPOT(BW)`] || 0;
+            results.push({ region: port.name, label: 'SPOT(BW)', hC: h*qH, lC: l*qL, gC: g*qG, barge: 0, addCharge: addVal, total: (h*qH)+(l*qL)+(g*qG)+addVal, available: true });
+        });
+
+        if (checkedRegions.includes('한국')) {
+            termVendors.forEach(v => {
+                const p = termPrices[v.id];
+                let av = !( (v.id==='wfs' && qH>0 && qH<300) || (v.id==='pen' && qL>0) );
+                const barge = av ? calculateBarge(v.id, qH, qL, qG) : 0;
+                const addVal = addCharges[`한국-${v.vName}`] || 0;
+                results.push({ region: '한국', label: v.vName, hC: p.h*qH, lC: (p.l||0)*qL, gC: p.g*qG, barge: barge, addCharge: addVal, total: av ? (p.h*qH+(p.l||0)*qL+p.g*qG+barge+addVal) : Infinity, available: av });
+            });
+        }
+
+        results.sort((a,b) => a.total - b.total);
+        renderFinal(results);
+        updateKPI(results);
+        updateChart(results.filter(r => r.available && r.total !== Infinity));
+    }
+
+    function updateDiff(id, val) {
+        const el = document.getElementById(id); if(!el) return;
+        el.innerText = val === 0 ? "0" : val.toFixed(2);
+        el.className = val < 0 ? "minus" : (val > 0 ? "plus" : "");
+    }
+
+    function renderFinal(results) {
+        const tbody = document.getElementById('final-body');
+        const active = results.filter(r => r.available && r.total !== Infinity);
+        tbody.innerHTML = results.map(r => {
+            if (!r.available) return `<tr class="unavailable"><td>${r.region}</td><td>${r.label}</td><td colspan="6">구매불가</td></tr>`;
+            let cls = r.total === active[0]?.total ? "row-best" : (r.total === active[1]?.total ? "row-second" : "");
+            let badge = r.total === active[0]?.total ? '<span class="badge badge-best">BEST</span>' : (r.total === active[1]?.total ? '<span class="badge badge-second">2ND</span>' : "");
+            return `<tr class="${cls}"><td>${r.region}</td><td>${r.label} ${badge}</td><td>${r.hC.toLocaleString()}</td><td>${r.lC.toLocaleString()}</td><td>${r.gC.toLocaleString()}</td><td>${r.barge.toLocaleString()}</td><td><input type="number" class="add-charge-input" value="${addCharges[`${r.region}-${r.label}`] || ""}" onchange="setAddCharge('${r.region}', '${r.label}', this.value)" onkeydown="if(event.key==='Enter') this.blur();" placeholder="0"></td><td>$ ${r.total.toLocaleString(undefined,{minimumFractionDigits:2})}</td></tr>`;
+        }).join('');
+    }
+
+    function updateKPI(results) {
+        const active = results.filter(r => r.available && r.total !== Infinity);
+        if (active.length === 0) return;
+        document.getElementById('kpi-best').innerText = `${active[0].region} (${active[0].label})`;
+        document.getElementById('kpi-second').innerText = active[1] ? `${active[1].region} (${active[1].label})` : "-";
+        document.getElementById('kpi-min-total').innerText = `$ ${active[0].total.toLocaleString(undefined,{minimumFractionDigits:2})}`;
+        const wfs = results.find(r => r.label === '월드퓨얼');
+        document.getElementById('kpi-savings').innerText = (wfs && wfs.available) ? `$ ${(wfs.total - active[0].total).toLocaleString(undefined,{minimumFractionDigits:2})}` : "WFS 구매불가";
+    }
+
+    function updateChart(results) {
+        const ctx = document.getElementById('costChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: results.map(r => `${r.region}(${r.label})`),
+                datasets: [{ data: results.map(r => r.total), backgroundColor: results.map((v, i) => i === 0 ? '#059669' : (i === 1 ? '#0ea5e9' : '#cbd5e1')), borderRadius: 5 }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: false } } }
+        });
+    }
+
+    window.onload = () => {
+        const today = new Date();
+        document.getElementById('base-date').value = today.toISOString().split('T')[0];
+        fetchSpreadsheetData();
+    };
+</script>
+</body>
+</html>
