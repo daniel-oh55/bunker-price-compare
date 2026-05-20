@@ -15,7 +15,15 @@
         body { font-family: 'Pretendard', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #1e293b; }
         .container { max-width: 1400px; margin: 0 auto; }
         
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; }
+        .header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .sheet-link-button {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-height: 35px; padding: 0 14px; border-radius: 8px;
+            background: var(--primary); color: #fff; text-decoration: none;
+            font-size: 0.9rem; font-weight: 800; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .sheet-link-button:hover { background: #1d4ed8; }
         .date-input-group { background: #e2e8f0; padding: 8px 15px; border-radius: 8px; display: flex; align-items: center; gap: 10px; }
         .date-input-group input { border: 1px solid #cbd5e1; padding: 4px; border-radius: 4px; font-weight: bold; cursor: pointer; }
 
@@ -71,9 +79,12 @@
 <div class="container">
     <header>
         <h1>🚢 포트별 벙커 구매금액 비교 시스템 <span id="sync-status">● 데이터 동기화 대기 중...</span></h1>
-        <div class="date-input-group">
-            <label>기준일:</label>
-            <input type="date" id="base-date" onchange="fetchSpreadsheetData()">
+        <div class="header-actions">
+            <a class="sheet-link-button" href="https://docs.google.com/spreadsheets/d/1qG5thw_0Mcj-BxUXZuTpr3rsIsj0fr55qjK9BhVOZ3o/edit?gid=0#gid=0" target="_blank" rel="noopener noreferrer">가격시트</a>
+            <div class="date-input-group">
+                <label>기준일:</label>
+                <input type="date" id="base-date" onchange="fetchSpreadsheetData()">
+            </div>
         </div>
     </header>
 
